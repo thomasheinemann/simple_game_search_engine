@@ -224,16 +224,17 @@ class StateMachine(Generic[StateSchema]):
         while current_step_id:
             step = self.steps[current_step_id]
             if isinstance(step, Termination):
-                print(f"[StateMachine] Terminating: {current_step_id}")
+                # print(f"[StateMachine] Terminating: {current_step_id}")
                 break
             
             # Replace state entirely
             state = step.run(state, self.state_schema, resource)  
 
-            if isinstance(step, EntryPoint):
-                print(f"[StateMachine] Starting: {current_step_id}")
-            else:
-                print(f"[StateMachine] Executing step: {current_step_id}")
+            # if isinstance(step, EntryPoint):
+            #     print(f"[StateMachine] Starting: {current_step_id}")
+            # else:
+            #     print(f"[StateMachine] Executing step: {current_step_id}")
+
 
             # Create and add snapshot to the current run
             snapshot = Snapshot.create(copy.deepcopy(state), self.state_schema, current_step_id)

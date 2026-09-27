@@ -1,17 +1,19 @@
 # UdaPlay - AI Game Research Agent Project
 
 ## Project Overview
-UdaPlay is an AI-powered research agent for the video game industry. This project is divided into two main parts that will help you build a sophisticated AI agent capable of answering questions about video games using both local knowledge and web searches.
+UdaPlay is an AI-powered research agent for the video game industry. This project is provided and guided by udacity inc.
+The initial commit marks the template provided by udacity.
+The project is divided into two main parts that will help building a sophisticated AI agent capable of answering questions about video games using both local knowledge and web searches.
 
 ## Project Structure
 
 ### Part 1: Offline RAG (Retrieval-Augmented Generation)
-In this part, you'll build a Vector Database using ChromaDB to store and retrieve video game information efficiently.
+In this part, a Vector Database is using ChromaDB to store and retrieve video game information efficiently.
 
-Key tasks:
-- Set up ChromaDB as a persistent client
-- Create a collection with appropriate embedding functions
-- Process and index game data from JSON files
+Key Implementations:
+- ChromaDB as a persistent client
+- a collection with appropriate embedding functions
+- processing and indexing game data from JSON files
 - Each game document contains:
   - Name
   - Platform
@@ -21,36 +23,21 @@ Key tasks:
   - Year of Release
 
 ### Part 2: AI Agent Development
-Build an intelligent agent that combines local knowledge with web search capabilities.
+Here an intelligent agent that combines local knowledge with web search capabilities is implemented.
 
-The agent will have the following capabilities:
+The agent has the following capabilities:
 1. Answer questions using internal knowledge (RAG)
 2. Search the web when needed
 3. Maintain conversation state
 4. Return structured outputs
 5. Store useful information for future use
 
-Required Tools to Implement:
-1. `retrieve_game`: Search the vector database for game information
-2. `evaluate_retrieval`: Assess the quality of retrieved results
-3. `game_web_search`: Perform web searches for additional information
-
-## Requirements
-
-### Environment Setup
-Create a `.env` file with the following API keys:
-```
-OPENAI_API_KEY="YOUR_KEY"
-CHROMA_OPENAI_API_KEY="YOUR_KEY"
-TAVILY_API_KEY="YOUR_KEY"
-```
-
-### Project Dependencies
-- Python 3.11+
-- ChromaDB
-- OpenAI
-- Tavily
-- dotenv
+Implemented tools:
+1. `retrieve_game`: Search the vector database for game information.
+2. `evaluate_retrieval`: Assess the quality of retrieved results.
+3. `game_web_search`: Perform web searches for additional information.
+4. `memory_register_tool`: Store a user preference or important fact in long-term memory.
+5. `memory_search_tool`: Search long-term memory for previously stored user preferences or facts.
 
 ### Directory Structure
 ```
@@ -66,30 +53,22 @@ project/
 │   └── Udaplay_02_starter_project.ipynb  # Part 2 implementation
 ```
 
-## Getting Started
 
-1. Create and activate a virtual environment
-2. Install required dependencies
-3. Set up your `.env` file with necessary API keys
-4. Follow the notebooks in order:
-   - Complete Part 1 to set up your vector database
-   - Complete Part 2 to implement the AI agent
+### Conda Environment
+Create a virtual environment using `conda env create -f environment.yml`; and activate it with `conda activate env_simple_game_search_engine`
 
-## Testing Your Implementation
+### Environmental Variable Setup
+Create a `.env` file with the following API keys:
+```
+OPENAI_API_KEY="YOUR_KEY"
+TAVILY_API_KEY="YOUR_KEY"
+```
 
-After completing both parts, test your agent with questions like:
-- "When was Pokémon Gold and Silver released?"
-- "Which one was the first 3D platformer Mario game?"
-- "Was Mortal Kombat X released for PlayStation 5?"
 
-## Advanced Features
+## Testing Implementation
 
-After completing the basic implementation, you can enhance your agent with:
-- Long-term memory capabilities
-- Additional tools and capabilities
-
-## Notes
-- Make sure to implement proper error handling
-- Follow best practices for API key management
-- Document your code thoroughly
-- Test your implementation with various types of queries
+The agent is tested with following questions:
+- "In which year was 'Super Mario 64' released?"
+- "In which year was 'Super Mario 64' released? And did I like it?"
+- "In which year was 'Super Mario 64' released? And did I like it? And in which country was it released?"
+for the given fact "'Super Mario 64' was often played by me and I enjoyed it.".

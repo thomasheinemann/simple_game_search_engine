@@ -1,3 +1,4 @@
+from platform import machine
 from typing import TypedDict, List, Optional, Union, TypeVar
 import json
 
@@ -38,11 +39,16 @@ class Agent:
         # Initialize memory and state machine
         self.memory = ShortTermMemory()
         self.workflow = self._create_state_machine()
+    def remove_store_tool(self) -> None:
+        """Reduce the workflow to only include the load, llm, and tool steps, removing the store step."""
+        self.workflow = self._create_state_machine_no_store()
+
 
     def _prepare_messages_step(self, state: AgentState) -> AgentState:
         """Step logic: Prepare messages for LLM consumption"""
+        # print("_prepare_messages_step")
         messages = state.get("messages", [])
-        
+        # print(messages)
         # If no messages exist, start with system message
         if not messages:
             messages = [SystemMessage(content=state["instructions"])]
@@ -55,13 +61,85 @@ class Agent:
             "session_id": state["session_id"]
         }
 
-    def _llm_step(self, state: AgentState) -> AgentState:
-        """Step logic: Process the current state through the LLM"""
+    def _store_step(self, state: AgentState) -> AgentState:
+        """Step logic: Store the current information"""
+        # print("_store_step")
         # Initialize LLM
         llm = LLM(
-            model=self.model_name,
-            temperature=self.temperature,
-            tools=self.tools
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    tools=[
+                        tool
+                        for tool in self.tools
+                        if tool.name in ["memory_register_tool"]
+                    ]
+                )
+
+        response = llm.invoke(state["messages"])
+        tool_calls = response.tool_calls if response.tool_calls else None
+
+        current_total = state.get("total_tokens", 0)
+        if response.token_usage:
+            current_total += response.token_usage.total_tokens
+
+        # Create AI message with content and tool calls
+        ai_message = AIMessage(
+            content=response.content, 
+            tool_calls=tool_calls,
+        )
+
+        return {
+            "messages": state["messages"] + [ai_message],
+            "current_tool_calls": tool_calls,
+            "session_id": state["session_id"],
+            "total_tokens": current_total,
+        }
+    def _load_step(self, state: AgentState) -> AgentState:
+        """Step logic: Load the current information"""
+        # print("_load_step")
+        # Initialize LLM
+        llm = LLM(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    tools=[
+                        tool
+                        for tool in self.tools
+                        if tool.name in ["memory_search_tool"]
+                    ]
+                )
+
+        response = llm.invoke(state["messages"])
+        tool_calls = response.tool_calls if response.tool_calls else None
+
+        current_total = state.get("total_tokens", 0)
+        if response.token_usage:
+            current_total += response.token_usage.total_tokens
+
+        # Create AI message with content and tool calls
+        ai_message = AIMessage(
+            content=response.content, 
+            tool_calls=tool_calls,
+        )
+
+        return {
+            "messages": state["messages"] + [ai_message],
+            "current_tool_calls": tool_calls,
+            "session_id": state["session_id"],
+            "total_tokens": current_total,
+        }
+    def _llm_step(self, state: AgentState) -> AgentState:
+        """Step logic: Process the current state through the LLM"""
+        # print("_llm_step")
+        # Initialize LLM
+        llm = LLM(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    tools=[
+                        tool
+                        for tool in self.tools
+                        if tool.name in ["retrieve_game", "evaluate_retrieval", "game_web_search"]
+                        # if tool.name in ["retrieve_game", "evaluate_retrieval", "game_web_search"]
+                    ]
         )
 
         response = llm.invoke(state["messages"])
@@ -86,9 +164,10 @@ class Agent:
 
     def _tool_step(self, state: AgentState) -> AgentState:
         """Step logic: Execute any pending tool calls"""
+        
         tool_calls = state["current_tool_calls"] or []
         tool_messages = []
-        
+        # print("_tool_step :  ", tool_calls)
         for call in tool_calls:
             # Access tool call data correctly
             function_name = call.function.name
@@ -104,7 +183,6 @@ class Agent:
                     name=function_name, 
                 )
                 tool_messages.append(tool_message)
-        
         # Clear tool calls and add results to messages
         return {
             "messages": state["messages"] + tool_messages,
@@ -119,28 +197,68 @@ class Agent:
         # Create steps
         entry = EntryPoint[AgentState]()
         message_prep = Step[AgentState]("message_prep", self._prepare_messages_step)
+        store = Step[AgentState]("store", self._store_step)
+        load = Step[AgentState]("load", self._load_step)
         llm_processor = Step[AgentState]("llm_processor", self._llm_step)
+        tool_executor_prim = Step[AgentState]("tool_executor_prim", self._tool_step)
         tool_executor = Step[AgentState]("tool_executor", self._tool_step)
         termination = Termination[AgentState]()
         
-        machine.add_steps([entry, message_prep, llm_processor, tool_executor, termination])
+        machine.add_steps([entry, message_prep, store, load, llm_processor, tool_executor_prim, tool_executor, termination])
         
         # Add transitions
-        machine.connect(entry, message_prep)
-        machine.connect(message_prep, llm_processor)
-        
-        # Transition based on whether there are tool calls
+        ## functions to satisfy that only one of the two transitions is taken
+        def check_tool_calls_prim(state: AgentState) -> Union[Step[AgentState], str]:
+            """Functions to satisfy that only one of the two transitions is taken"""
+            if state.get("current_tool_calls"):
+                return tool_executor_prim   
+            return termination
         def check_tool_calls(state: AgentState) -> Union[Step[AgentState], str]:
-            """Transition logic: Check if there are tool calls"""
+            """Functions to satisfy that only one of the two transitions is taken"""
             if state.get("current_tool_calls"):
                 return tool_executor
             return termination
         
-        machine.connect(llm_processor, [tool_executor, termination], check_tool_calls)
+        machine.connect(entry, message_prep)
+        machine.connect(message_prep, store)
+        machine.connect(store, [tool_executor_prim, termination], check_tool_calls_prim)
+        machine.connect(tool_executor_prim, load) 
+        machine.connect(load, [tool_executor, termination], check_tool_calls)
         machine.connect(tool_executor, llm_processor)  # Go back to llm after tool execution
-        
+        machine.connect(llm_processor, [tool_executor, termination], check_tool_calls)
         return machine
 
+    def _create_state_machine_no_store(self) -> StateMachine[AgentState]:
+        """Create the internal state machine for the agent without store step"""
+        machine = StateMachine[AgentState](AgentState)
+        
+        # Create steps
+        entry = EntryPoint[AgentState]()
+        message_prep = Step[AgentState]("message_prep", self._prepare_messages_step)
+        # store = Step[AgentState]("store", self._store_step)
+        load = Step[AgentState]("load", self._load_step)
+        llm_processor = Step[AgentState]("llm_processor", self._llm_step)
+        tool_executor_prim = Step[AgentState]("tool_executor_prim", self._tool_step)
+        tool_executor = Step[AgentState]("tool_executor", self._tool_step)
+        termination = Termination[AgentState]()
+
+        machine.add_steps([entry, message_prep, load, llm_processor, tool_executor_prim, tool_executor, termination])
+        
+        # Add transitions
+        ## function to satisfy that only one of the two transitions is taken
+        def check_tool_calls(state: AgentState) -> Union[Step[AgentState], str]:
+            """Functions to satisfy that only one of the two transitions is taken"""
+            if state.get("current_tool_calls"):
+                return tool_executor
+            return termination
+        
+        machine.connect(entry, message_prep)
+        machine.connect(message_prep, load)
+        
+        machine.connect(load, [tool_executor, termination], check_tool_calls)
+        machine.connect(tool_executor, llm_processor)  # Go back to llm after tool execution
+        machine.connect(llm_processor, [tool_executor, termination], check_tool_calls)
+        return machine
     def invoke(self, query: str, session_id: Optional[str] = None) -> Run:
         """
         Run the agent on a query
